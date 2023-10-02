@@ -54,9 +54,13 @@ enum of_pci_prop_compatible {
 static void of_pci_set_address(struct pci_dev *pdev, u32 *prop, u64 addr,
 			       u32 reg_num, u32 flags, bool reloc)
 {
-	prop[0] = FIELD_PREP(OF_PCI_ADDR_FIELD_BUS, pdev->bus->number) |
-		FIELD_PREP(OF_PCI_ADDR_FIELD_DEV, PCI_SLOT(pdev->devfn)) |
-		FIELD_PREP(OF_PCI_ADDR_FIELD_FUNC, PCI_FUNC(pdev->devfn));
+	if (pdev)
+		prop[0] = FIELD_PREP(OF_PCI_ADDR_FIELD_BUS, pdev->bus->number) |
+			  FIELD_PREP(OF_PCI_ADDR_FIELD_DEV, PCI_SLOT(pdev->devfn)) |
+			  FIELD_PREP(OF_PCI_ADDR_FIELD_FUNC, PCI_FUNC(pdev->devfn));
+	else
+		prop[0] = 0;
+
 	prop[0] |= flags | reg_num;
 	if (!reloc) {
 		prop[0] |= OF_PCI_ADDR_FIELD_NONRELOC;
@@ -308,6 +312,7 @@ static int of_pci_prop_intr_map(struct pci_dev *pdev, struct of_changeset *ocs,
 	return 0;
 
 failed:
+	printk("%s: failed\n", __func__);
 	kfree(int_map);
 	return ret;
 }
@@ -348,6 +353,8 @@ int of_pci_host_bridge_create_ranges(struct pci_bus *bus,
 	u64 val64;
 	u32 flags;
 
+	dev_err(&bus->dev, "%s: call\n", __func__);
+
 	if (of_n_addr_cells(parent) > 2)
 		return -EINVAL;
 
@@ -357,13 +364,18 @@ int of_pci_host_bridge_create_ranges(struct pci_bus *bus,
 		    !(resource_type(res) & IORESOURCE_MEM_64))
 			continue;
 
-		flags = OF_PCI_ADDR_FIELD_NONRELOC;
+		//flags = OF_PCI_ADDR_FIELD_NONRELOC;
 		if (of_pci_get_addr_flags(res, &flags))
 			continue;
 
 		/* PCI bus address */
 		val64 = res->start;
-		of_pci_set_address(&ranges[range_idx], val64, flags);
+		//of_pci_set_address(struct pci_dev *pdev, u32 *prop, u64 addr,
+		//	       u32 reg_num, u32 flags, bool reloc)
+		//of_pci_set_address(&ranges[range_idx], val64, flags);
+		of_pci_set_address(NULL, &ranges[range_idx], val64, 0, flags, false);
+		dev_err(&bus->dev, "%s: PCI bus address = 0x%x 0x%x 0x%x\n", __func__,
+			ranges[range_idx], ranges[range_idx+1], ranges[range_idx+2]);
 		range_idx += OF_PCI_ADDRESS_CELLS;
 
 		/* Root bus address */
@@ -371,9 +383,14 @@ int of_pci_host_bridge_create_ranges(struct pci_bus *bus,
 			ranges[range_idx++] = val64 >> 32;
 		ranges[range_idx++] = val64;
 
+		dev_err(&bus->dev, "%s: Root bus address = 0x%llx\n", __func__, val64);
+
 		/* Size */
 		val64 = resource_size(res);
-		of_pci_set_size(&ranges[range_idx], val64);
+		//of_pci_set_size(&ranges[range_idx], val64);
+		ranges[range_idx] = upper_32_bits(val64);
+		ranges[range_idx+1] = lower_32_bits(val64);
+		dev_err(&bus->dev, "%s: size = 0x%llx\n", __func__, val64);
 		range_idx += OF_PCI_SIZE_CELLS;
 	}
 
@@ -383,11 +400,27 @@ int of_pci_host_bridge_create_ranges(struct pci_bus *bus,
 
 int of_pci_create_root_bus(struct pci_bus *bus, struct of_changeset *ocs, struct device_node *np)
 {
-	int ret = 0;
+	//int ret = 0;
 
-	ret |= of_pci_prop_device_type(NULL, ocs, np);
-	ret |= of_pci_prop_address_cells(NULL, ocs, np);
-	ret |= of_pci_prop_size_cells(NULL, ocs, np);
+	//ret |= of_pci_prop_device_type(NULL, ocs, np);
+	//ret |= of_pci_prop_address_cells(NULL, ocs, np);
+	//ret |= of_pci_prop_size_cells(NULL, ocs, np);
+
+	int ret;
+
+	ret = of_changeset_add_prop_string(ocs, np, "device_type", "pci");
+	if (ret)
+		return ret;
+
+	ret = of_changeset_add_prop_u32(ocs, np, "#address-cells",
+					OF_PCI_ADDRESS_CELLS);
+	if (ret)
+		return ret;
+
+	ret = of_changeset_add_prop_u32(ocs, np, "#size-cells",
+					OF_PCI_SIZE_CELLS);
+	if (ret)
+		return ret;
 
 	/*
 	 * The added properties will be released when the

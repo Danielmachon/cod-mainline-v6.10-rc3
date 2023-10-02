@@ -697,14 +697,24 @@ static struct device_node *of_pci_create_root_bus_node(struct pci_bus *bus)
 	struct device_node *np;
 	int ret;
 
+	printk("%s: call ...\n", __func__);
+
 	if (!of_root) {
 		pr_err("of_root node is NULL, cannot create PCI root bus node");
 		return NULL;
 	}
 
-	np = of_create_node(of_root, "pci", &cset);
-	if (!np)
+	cset = kmalloc(sizeof(*cset), GFP_KERNEL);
+	if (!cset)
 		return NULL;
+	of_changeset_init(cset);
+
+	np = of_changeset_create_node(cset, of_root, "pci");
+	if (!np) {
+		kfree(cset);
+		return NULL;
+	}
+	np->data = cset;
 
 	ret = of_pci_create_root_bus(bus, cset, np);
 	if (ret)
@@ -714,11 +724,13 @@ static struct device_node *of_pci_create_root_bus_node(struct pci_bus *bus)
 	if (ret)
 		goto failed;
 
+	printk("%s: call done\n", __func__);
+
 	return np;
 
 failed:
-	of_destroy_node(np);
-
+	printk("%s: failed\n", __func__);
+	of_node_put(np);
 	return NULL;
 }
 
@@ -727,6 +739,8 @@ void of_pci_update_root_bus_ranges(struct pci_bus *bus)
 	static struct of_changeset cset;
 	struct device_node *np = bus->dev.of_node;
 	int ret;
+
+	printk("%s: call ...\n", __func__);
 
 	of_changeset_init(&cset);
 
@@ -738,9 +752,12 @@ void of_pci_update_root_bus_ranges(struct pci_bus *bus)
 	if (ret)
 		goto failed;
 
+	printk("%s: done\n", __func__);
+
 	return;
 
 failed:
+	printk("%s: failed\n", __func__);
 	of_changeset_destroy(&cset);
 
 	return;
