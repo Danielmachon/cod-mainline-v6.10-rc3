@@ -695,6 +695,7 @@ static struct device_node *of_pci_create_root_bus_node(struct pci_bus *bus)
 {
 	static struct of_changeset *cset;
 	struct device_node *np;
+	char *name;
 	int ret;
 
 	printk("%s: call ...\n", __func__);
@@ -704,12 +705,22 @@ static struct device_node *of_pci_create_root_bus_node(struct pci_bus *bus)
 		return NULL;
 	}
 
-	cset = kmalloc(sizeof(*cset), GFP_KERNEL);
-	if (!cset)
+	printk("%s: bus->bridge=%s\n", __func__, dev_name(bus->bridge));
+
+	name = kasprintf(GFP_KERNEL, "pci-host@%x,%x", pci_domain_nr(bus),
+			 bus->number);
+	if (!name)
 		return NULL;
+
+	cset = kmalloc(sizeof(*cset), GFP_KERNEL);
+	if (!cset) {
+		kfree(name);
+		return NULL;
+	}
 	of_changeset_init(cset);
 
-	np = of_changeset_create_node(cset, of_root, "pci");
+	np = of_changeset_create_node(cset, of_root, name);
+	kfree(name);
 	if (!np) {
 		kfree(cset);
 		return NULL;
@@ -720,9 +731,20 @@ static struct device_node *of_pci_create_root_bus_node(struct pci_bus *bus)
 	if (ret)
 		goto failed;
 
+	/*
+	 * This of_node will be added to an existing device.
+	 * Avoid any device creation and use the existing device
+	 */
+	of_node_set_flag(np, OF_POPULATED);
+	np->fwnode.dev = bus->bridge;
+	fwnode_dev_initialized(&np->fwnode, true);
+
 	ret = of_changeset_apply(cset);
 	if (ret)
 		goto failed;
+
+	/* Add the of_node to the existing device */
+	device_add_of_node(bus->bridge, np);
 
 	printk("%s: call done\n", __func__);
 
@@ -740,7 +762,8 @@ void of_pci_update_root_bus_ranges(struct pci_bus *bus)
 	struct device_node *np = bus->dev.of_node;
 	int ret;
 
-	printk("%s: call ...\n", __func__);
+	if (!np)
+		return;
 
 	of_changeset_init(&cset);
 
@@ -752,12 +775,9 @@ void of_pci_update_root_bus_ranges(struct pci_bus *bus)
 	if (ret)
 		goto failed;
 
-	printk("%s: done\n", __func__);
-
 	return;
 
 failed:
-	printk("%s: failed\n", __func__);
 	of_changeset_destroy(&cset);
 
 	return;
