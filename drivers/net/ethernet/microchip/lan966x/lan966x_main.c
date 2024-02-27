@@ -783,6 +783,32 @@ static void lan966x_cleanup_ports(struct lan966x *lan966x)
 		devm_free_irq(lan966x->dev, lan966x->ptp_ext_irq, lan966x);
 }
 
+static int lan966x_touch_phy(const struct fwnode_handle *fwnode)
+{
+	struct fwnode_handle *phy_fwnode;
+	struct phy_device *phy_dev;
+	int ret;
+
+	phy_fwnode = fwnode_get_phy_node(fwnode);
+	if (IS_ERR(phy_fwnode)) {
+		ret = PTR_ERR(phy_fwnode);
+		if (ret == -ENOENT)
+			return 0;
+		return ret;
+	}
+
+	phy_dev = fwnode_phy_find_device(phy_fwnode);
+
+	fwnode_handle_put(phy_fwnode);
+
+	if (phy_dev) {
+		put_device(&phy_dev->mdio.dev);
+		return 0;
+	}
+
+	return -EPROBE_DEFER;
+}
+
 static int lan966x_probe_port(struct lan966x *lan966x, u32 p,
 			      phy_interface_t phy_mode,
 			      struct fwnode_handle *portnp)
@@ -1176,6 +1202,17 @@ static int lan966x_probe(struct platform_device *pdev)
 	if (!ports)
 		return dev_err_probe(&pdev->dev, -ENODEV,
 				     "no ethernet-ports child found\n");
+
+	fwnode_for_each_available_child_node(ports, portnp) {
+		err = lan966x_touch_phy(portnp);
+		if (err) {
+			dev_err_probe(&pdev->dev, err,
+				      "touch phy for %pfw failed\n", portnp);
+			fwnode_handle_put(portnp);
+			fwnode_handle_put(ports);
+			return err;
+		}
+	}
 
 	lan966x->debugfs_root = debugfs_create_dir("lan966x", NULL);
 
