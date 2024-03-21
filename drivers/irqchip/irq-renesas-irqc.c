@@ -168,8 +168,9 @@ static int irqc_probe(struct platform_device *pdev)
 
 	p->cpu_int_base = p->iomem + IRQC_INT_CPU_BASE(0); /* SYS-SPI */
 
-	p->irq_domain = irq_domain_add_linear(dev->of_node, p->number_of_irqs,
-					      &irq_generic_chip_ops, p);
+	p->irq_domain = irq_domain_alloc_linear(of_node_to_fwnode(dev->of_node),
+						p->number_of_irqs,
+						&irq_generic_chip_ops, p);
 	if (!p->irq_domain) {
 		ret = -ENXIO;
 		dev_err(dev, "cannot initialize irq domain\n");
@@ -181,7 +182,7 @@ static int irqc_probe(struct platform_device *pdev)
 					     0, 0, IRQ_GC_INIT_NESTED_LOCK);
 	if (ret) {
 		dev_err(dev, "cannot allocate generic chip\n");
-		goto err_remove_domain;
+		goto err_free_domain;
 	}
 
 	p->gc = irq_get_domain_generic_chip(p->irq_domain, 0);
@@ -195,6 +196,7 @@ static int irqc_probe(struct platform_device *pdev)
 	p->gc->chip_types[0].chip.flags	= IRQCHIP_MASK_ON_SUSPEND;
 
 	irq_domain_set_pm_device(p->irq_domain, dev);
+	irq_domain_publish(p->irq_domain);
 
 	/* request interrupts one by one */
 	for (k = 0; k < p->number_of_irqs; k++) {
@@ -202,7 +204,7 @@ static int irqc_probe(struct platform_device *pdev)
 				     irqc_irq_handler, 0, name, &p->irq[k])) {
 			dev_err(dev, "failed to request IRQ\n");
 			ret = -ENOENT;
-			goto err_remove_domain;
+			goto err_unpublish_domain;
 		}
 	}
 
@@ -210,21 +212,24 @@ static int irqc_probe(struct platform_device *pdev)
 
 	return 0;
 
-err_remove_domain:
-	irq_domain_remove(p->irq_domain);
+err_unpublish_domain:
+	irq_domain_unpublish(p->irq_domain);
+err_free_domain:
+	irq_domain_free(p->irq_domain);
 err_runtime_pm_disable:
 	pm_runtime_put(dev);
 	pm_runtime_disable(dev);
 	return ret;
 }
 
-static void irqc_remove(struct platform_device *pdev)
+static int irqc_remove(struct platform_device *pdev)
 {
 	struct irqc_priv *p = platform_get_drvdata(pdev);
 
 	irq_domain_remove(p->irq_domain);
 	pm_runtime_put(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+	return 0;
 }
 
 static int __maybe_unused irqc_suspend(struct device *dev)
@@ -247,11 +252,11 @@ MODULE_DEVICE_TABLE(of, irqc_dt_ids);
 
 static struct platform_driver irqc_device_driver = {
 	.probe		= irqc_probe,
-	.remove_new	= irqc_remove,
+	.remove		= irqc_remove,
 	.driver		= {
-		.name		= "renesas_irqc",
+		.name	= "renesas_irqc",
 		.of_match_table	= irqc_dt_ids,
-		.pm		= &irqc_pm_ops,
+		.pm	= &irqc_pm_ops,
 	}
 };
 
