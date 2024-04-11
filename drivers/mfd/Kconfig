@@ -168,6 +168,11 @@ config MFD_LAN966X_PCI
 	    - lan966x-serdes (PHY_LAN966X_SERDES)
 	    - lan966x-miim (MDIO_MSCC_MIIM)
 	    - lan966x-switch (LAN966X_SWITCH)
+	    - lan966x-gck (COMMON_CLK_LAN966X)
+	    - sama5d2-flexcom (MFD_ATMEL_FLEXCOM)
+	    - lan966x-i2c (I2C_AT91)
+	    - i2c-mux-pinctrl (I2C_MUX_PINCTRL)
+	    - sfp select (SFP)
 
 if MFD_LAN966X_PCI
 
@@ -194,6 +199,21 @@ comment "MDIO_MSCC_MIIM not set. Your device may not work as expected"
 
 comment "LAN966X_SWITCH not set. Your device may not work as expected"
 	depends on LAN966X_SWITCH=n
+
+comment "COMMON_CLK_LAN966X not set. Your device may not work as expected"
+	depends on COMMON_CLK_LAN966X=n
+
+comment "MFD_ATMEL_FLEXCOM not set. Your device may not work as expected"
+	depends on MFD_ATMEL_FLEXCOM=n
+
+comment "I2C_AT91 not set. Your device may not work as expected"
+	depends on I2C_AT91=n
+
+comment "MUX_PINCTRL not set. Your device may not work as expected"
+	depends on MUX_PINCTRL=n
+
+comment "SFP not set. Your device may not work as expected"
+	depends on SFP=n
 
 endif
 
