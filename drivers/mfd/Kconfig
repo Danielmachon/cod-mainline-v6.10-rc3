@@ -168,6 +168,34 @@ config MFD_LAN966X_PCI
 	    - lan966x-miim (MDIO_MSCC_MIIM)
 	    - lan966x-switch (LAN966X_SWITCH)
 
+if MFD_LAN966X_PCI
+
+comment "COMMON_CLK not set. Your device may not work as expected"
+	depends on COMMON_CLK=n
+
+comment "LAN966X_OIC not set. Your device may not work as expected"
+	depends on LAN966X_OIC=n
+
+comment "MFD_SYSCON not set. Your device may not work as expected"
+	depends on MFD_SYSCON=n
+
+comment "RESET_MCHP_SPARX5 not set. Your device may not work as expected"
+	depends on RESET_MCHP_SPARX5=n
+
+comment "PINCTRL_OCELOT not set. Your device may not work as expected"
+	depends on PINCTRL_OCELOT=n
+
+comment "PHY_LAN966X_SERDES not set. Your device may not work as expected"
+	depends on PHY_LAN966X_SERDES=n
+
+comment "MDIO_MSCC_MIIM not set. Your device may not work as expected"
+	depends on MDIO_MSCC_MIIM=n
+
+comment "LAN966X_SWITCH not set. Your device may not work as expected"
+	depends on LAN966X_SWITCH=n
+
+endif
+
 config MFD_ATMEL_HLCDC
 	tristate "Atmel HLCDC (High-end LCD Controller)"
 	select MFD_CORE
