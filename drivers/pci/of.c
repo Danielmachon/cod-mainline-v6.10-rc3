@@ -15,8 +15,6 @@
 #include <linux/of_pci.h>
 #include "pci.h"
 
-static struct device_node *of_pci_create_root_bus_node(struct pci_bus *bus);
-
 #ifdef CONFIG_PCI
 /**
  * pci_set_of_node - Find and set device's DT device_node
@@ -52,8 +50,6 @@ void pci_set_bus_of_node(struct pci_bus *bus)
 
 	if (bus->self == NULL) {
 		node = pcibios_get_phb_of_node(bus);
-		if (!node)
-			node = of_pci_create_root_bus_node(bus);
 	} else {
 		node = of_node_get(bus->self->dev.of_node);
 		if (node && of_property_read_bool(node, "external-facing"))
@@ -691,105 +687,89 @@ out_free_name:
 	kfree(name);
 }
 
-static struct device_node *of_pci_create_root_bus_node(struct pci_bus *bus)
+void of_pci_remove_root_bus_node(struct pci_bus *bus)
 {
-	static struct of_changeset *cset;
 	struct device_node *np;
-	char *name;
+
+	np = pci_bus_to_OF_node(bus);
+	if (!np || !of_node_check_flag(np, OF_DYNAMIC))
+		return;
+
+	device_remove_of_node(&bus->dev);
+
+	of_changeset_revert(np->data);
+	of_changeset_destroy(np->data);
+	of_node_put(np);
+}
+
+void of_pci_make_root_bus_node(struct pci_bus *bus)
+{
+	struct device_node *np = NULL;
+	struct of_changeset *cset;
+	const char *name;
 	int ret;
 
-	printk("%s: call ...\n", __func__);
+	/*
+	 * If there is already a device tree node linked to this device,
+	 * return immediately.
+	 */
+	if (pci_bus_to_OF_node(bus))
+		return;
 
+	/* Check if there is a DT root node to attach this created node */
 	if (!of_root) {
 		pr_err("of_root node is NULL, cannot create PCI root bus node");
-		return NULL;
+		return;
 	}
 
-	printk("%s: bus->bridge=%s\n", __func__, dev_name(bus->bridge));
-
-	name = kasprintf(GFP_KERNEL, "pci-host@%x,%x", pci_domain_nr(bus),
+	name = kasprintf(GFP_KERNEL, "pci-root@%x,%x", pci_domain_nr(bus),
 			 bus->number);
 	if (!name)
-		return NULL;
+		return;
 
 	cset = kmalloc(sizeof(*cset), GFP_KERNEL);
-	if (!cset) {
-		kfree(name);
-		return NULL;
-	}
+	if (!cset)
+		goto out_free_name;
 	of_changeset_init(cset);
 
 	np = of_changeset_create_node(cset, of_root, name);
-	kfree(name);
-	if (!np) {
-		kfree(cset);
-		return NULL;
-	}
-	np->data = cset;
+	if (!np)
+		goto out_destroy_cset;
 
-	ret = of_pci_create_root_bus(bus, cset, np);
+	ret = of_pci_add_root_bus_properties(bus, cset, np);
 	if (ret)
-		goto failed;
+		goto out_free_node;
 
 	/*
 	 * This of_node will be added to an existing device.
 	 * Avoid any device creation and use the existing device
 	 */
 	of_node_set_flag(np, OF_POPULATED);
-	np->fwnode.dev = bus->bridge;
+	np->fwnode.dev = &bus->dev;
 	fwnode_dev_initialized(&np->fwnode, true);
 
 	ret = of_changeset_apply(cset);
 	if (ret)
-		goto failed;
+		goto out_free_node;
+
+	np->data = cset;
 
 	/* Add the of_node to the existing device */
-	device_add_of_node(bus->bridge, np);
+	device_add_of_node(&bus->dev, np);
+	kfree(name);
 
-	printk("%s: call done\n", __func__);
+	return;
 
-	return np;
-
-failed:
-	printk("%s: failed\n", __func__);
+out_free_node:
 	of_node_put(np);
-	return NULL;
+out_destroy_cset:
+	of_changeset_destroy(cset);
+	kfree(cset);
+out_free_name:
+	kfree(name);
 }
 
-void of_pci_update_root_bus_ranges(struct pci_bus *bus)
-{
-	static struct of_changeset cset;
-	struct device_node *np = bus->dev.of_node;
-	int ret;
-
-	if (!np)
-		return;
-
-	of_changeset_init(&cset);
-
-	ret = of_pci_host_bridge_create_ranges(bus, &cset, np);
-	if (ret)
-		goto failed;
-
-	ret = of_changeset_apply(&cset);
-	if (ret)
-		goto failed;
-
-	return;
-
-failed:
-	of_changeset_destroy(&cset);
-
-	return;
-}
-#else
-
-static struct device_node *of_pci_create_root_bus_node(struct pci_bus *bus)
-{
-	return NULL;
-}
-
-#endif
+#endif /* CONFIG_PCI_DYNAMIC_OF_NODES */
 
 #endif /* CONFIG_PCI */
 
