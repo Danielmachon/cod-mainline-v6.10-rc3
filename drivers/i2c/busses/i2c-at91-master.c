@@ -120,8 +120,7 @@ static void at91_calc_twi_clock(struct at91_twi_dev *dev)
 	}
 
 	dev->twi_cwgr_reg = (ckdiv << 16) | (cdiv << 8) | cdiv
-			    | AT91_TWI_CWGR_HOLD(hold)
-			    | pdata->clk_brsrcclk << 20;
+			    | AT91_TWI_CWGR_HOLD(hold);
 
 	dev->filter_width = filter_width;
 
