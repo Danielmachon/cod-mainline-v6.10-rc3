@@ -133,7 +133,7 @@
 					atmel,flexcom-mode = <ATMEL_FLEXCOM_MODE_TWI>;
 
 					i2c_lan966x: i2c@600 {
-						compatible = "microchip,lan966x-i2c";
+						compatible = "microchip,sam9x60-i2c";
 						reg = <0x600 0x200>;
 						interrupt-parent = <&oic>;
 						interrupts = <48 IRQ_TYPE_LEVEL_HIGH>;
